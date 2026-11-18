@@ -1,4 +1,4 @@
-name: Build TR3000 256MB + USB + OpenClash + PassWall2
+name: Build TR3000 256MB + USB + OpenClash + PassWall2 + iStore
 
 on:
   workflow_dispatch:
@@ -38,6 +38,7 @@ jobs:
           src-git openclash https://github.com/vernesong/OpenClash.git;master
           src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main
           src-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main
+          src-git istore https://github.com/linkease/istore.git;main
           EOF
           cat feeds.conf.default
 
@@ -85,14 +86,16 @@ jobs:
           CONFIG_PACKAGE_luci-proto-ppp=y
           CONFIG_PACKAGE_luci-app-openclash=y
           CONFIG_PACKAGE_luci-app-passwall2=y
+          CONFIG_PACKAGE_luci-app-store=y
           CFG
           make defconfig
           grep -q 'CONFIG_TARGET_PROFILE="DEVICE_cudy_tr3000-256mb-v1"' .config
           grep -q 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' .config
           grep -q 'CONFIG_PACKAGE_luci-app-openclash=y' .config || { echo "FAIL: openclash not selected"; exit 1; }
           grep -q 'CONFIG_PACKAGE_luci-app-passwall2=y' .config || { echo "FAIL: passwall2 not selected"; exit 1; }
+          grep -q 'CONFIG_PACKAGE_luci-app-store=y' .config || { echo "FAIL: istore not selected"; exit 1; }
           echo "=== selected proxy deps ==="
-          grep -E '^CONFIG_PACKAGE_(xray-core|v2ray-core|sing-box|chinadns-ng|dns2socks|kmod-tun|ip-full|ruby)=y' .config || true
+          grep -E '^CONFIG_PACKAGE_(xray-core|v2ray-core|sing-box|chinadns-ng|dns2socks|kmod-tun|ip-full|ruby|luci-lib-taskd|taskd)=y' .config || true
 
       - name: Download package sources
         working-directory: openwrt
@@ -114,6 +117,6 @@ jobs:
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: tr3000-usb-openclash-passwall2
+          name: tr3000-usb-proxy-store
           path: openwrt/bin/targets/mediatek/filogic/*cudy_tr3000-256mb-v1*
           if-no-files-found: error
