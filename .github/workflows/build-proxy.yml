@@ -88,6 +88,9 @@ jobs:
           CONFIG_PACKAGE_luci-app-passwall2=y
           CONFIG_PACKAGE_luci-app-store=y
           CFG
+          # iStore 的 Makefile 依赖 libuci-lua/mount-utils，这两个包在 25.12 已不存在
+          sed -i 's/+libuci-lua +mount-utils //' feeds/istore/luci/luci-app-store/Makefile
+          grep -n 'LUCI_DEPENDS' feeds/istore/luci/luci-app-store/Makefile
           make defconfig
           grep -q 'CONFIG_TARGET_PROFILE="DEVICE_cudy_tr3000-256mb-v1"' .config
           grep -q 'CONFIG_PACKAGE_kmod-usb-net-rndis=y' .config
@@ -95,7 +98,7 @@ jobs:
           grep -q 'CONFIG_PACKAGE_luci-app-passwall2=y' .config || { echo "FAIL: passwall2 not selected"; exit 1; }
           grep -q 'CONFIG_PACKAGE_luci-app-store=y' .config || { echo "FAIL: istore not selected"; exit 1; }
           echo "=== selected proxy deps ==="
-          grep -E '^CONFIG_PACKAGE_(xray-core|v2ray-core|sing-box|chinadns-ng|dns2socks|kmod-tun|ip-full|ruby|luci-lib-taskd|taskd)=y' .config || true
+          grep -E '^CONFIG_USE_APK|^CONFIG_PACKAGE_(xray-core|v2ray-core|sing-box|chinadns-ng|dns2socks|kmod-tun|ip-full|ruby|luci-lib-taskd|taskd)=y' .config || true
 
       - name: Download package sources
         working-directory: openwrt
