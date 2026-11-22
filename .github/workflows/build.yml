@@ -1,96 +1,158 @@
-name: Build FanchmWrt for Cudy TR3000 256MB
+name: build-fanchmwrt
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = only resolve .config (fast); build = full build"
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - build
+
+permissions:
+  contents: write
+
+env:
+  SRC_REPO: https://github.com/fanchmwrt/fanchmwrt.git
+  SRC_BRANCH: fanchmwrt-25.12.6
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 330
+    runs-on: ubuntu-22.04
+    timeout-minutes: 355
     steps:
+      - uses: actions/checkout@v4
+
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/az \
+                      /usr/local/share/boost /usr/local/lib/node_modules
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+          sudo apt-get clean
+          df -h /
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential clang flex bison g++ gawk \
-            gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
-            python3 python3-setuptools rsync unzip zlib1g-dev file wget time
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -y install \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext libncurses-dev libssl-dev python3-setuptools rsync unzip \
+            zlib1g-dev file wget qemu-utils subversion patch libelf-dev
 
       - name: Clone FanchmWrt source
-        run: |
-          git clone --depth 1 -b fanchmwrt-25.12.6 \
-            https://github.com/fanchmwrt/fanchmwrt.git openwrt
+        run: git clone --depth 1 -b "$SRC_BRANCH" "$SRC_REPO" openwrt
 
-      - name: Update feeds
-        working-directory: openwrt
+      - name: Add extra feeds
         run: |
+          cd openwrt
+          cat >> feeds.conf.default <<'EOF'
+src-git openclash https://github.com/vernesong/OpenClash.git;master
+src-git passwall2 https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main
+src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main
+src-git istore https://github.com/linkease/istore.git;main
+EOF
+          tail -8 feeds.conf.default
+
+      - name: Feeds update and install
+        run: |
+          cd openwrt
           ./scripts/feeds update -a
+          cp -fr feeds_patches/* feeds/
           ./scripts/feeds install -a
+          ./scripts/feeds install -d y -p istore luci-app-store || true
+          echo "== installed luci-app-openclash dir =="
+          ls -d package/feeds/openclash/* || true
+          echo "== installed passwall2 dir =="
+          ls -d package/feeds/passwall2/* || true
+          echo "== installed istore dir =="
+          ls -d package/feeds/istore/* || true
 
-      - name: Select device and USB drivers
-        working-directory: openwrt
+      - name: Resolve .config
         run: |
-          cat > .config <<'CFG'
-          CONFIG_TARGET_mediatek=y
-          CONFIG_TARGET_mediatek_filogic=y
-          CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_tr3000-256mb-v1=y
-          CONFIG_PACKAGE_luci=y
-          CONFIG_PACKAGE_kmod-usb-storage=y
-          CONFIG_PACKAGE_kmod-usb-storage-uas=y
-          CONFIG_PACKAGE_kmod-fs-ext4=y
-          CONFIG_PACKAGE_kmod-fs-vfat=y
-          CONFIG_PACKAGE_kmod-fs-exfat=y
-          CONFIG_PACKAGE_kmod-fs-ntfs3=y
-          CONFIG_PACKAGE_kmod-nls-cp437=y
-          CONFIG_PACKAGE_kmod-nls-iso8859-1=y
-          CONFIG_PACKAGE_kmod-nls-utf8=y
-          CONFIG_PACKAGE_block-mount=y
-          CONFIG_PACKAGE_usbutils=y
-          CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
-          CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y
-          CONFIG_PACKAGE_kmod-usb-net-rndis=y
-          CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
-          CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
-          CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y
-          CONFIG_PACKAGE_kmod-usb-serial-option=y
-          CONFIG_PACKAGE_kmod-usb-serial-wwan=y
-          CONFIG_PACKAGE_kmod-usb-acm=y
-          CONFIG_PACKAGE_uqmi=y
-          CONFIG_PACKAGE_umbim=y
-          CONFIG_PACKAGE_comgt=y
-          CONFIG_PACKAGE_luci-proto-qmi=y
-          CONFIG_PACKAGE_luci-proto-mbim=y
-          CONFIG_PACKAGE_luci-proto-ncm=y
-          CONFIG_PACKAGE_luci-proto-3g=y
-          CONFIG_PACKAGE_luci-proto-ppp=y
-          CFG
+          cd openwrt
+          cp "$GITHUB_WORKSPACE/config/diffconfig" .config
+          while read -r p; do
+            [ -z "$p" ] && continue
+            echo "CONFIG_PACKAGE_$p=y" >> .config
+          done < "$GITHUB_WORKSPACE/config/packages.txt"
           make defconfig
-          grep -q 'CONFIG_TARGET_PROFILE="DEVICE_cudy_tr3000-256mb-v1"' .config
-          grep -q 'CONFIG_PACKAGE_kmod-usb-storage=y' .config
-          grep -q 'CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y' .config
-          echo "device + usb drivers OK"
+          cp .config /tmp/resolved.config
+          echo "===== requested packages that did NOT survive defconfig ====="
+          while read -r p; do
+            [ -z "$p" ] && continue
+            grep -q "^CONFIG_PACKAGE_$p=y" .config || echo "MISSING: $p"
+          done < "$GITHUB_WORKSPACE/config/packages.txt"
+          echo "===== key selections present in .config ====="
+          grep -E '^CONFIG_(TARGET_DEVICE|PACKAGE_luci-app-(openclash|passwall2|store|ksmbd)|PACKAGE_xray-core)' .config || true
+          echo "===== firmware size / images ====="
+          grep -E '^CONFIG_TARGET_(ROOTFS_PARTSIZE|KERNEL_PARTSIZE)' .config || true
 
-      - name: Download package sources
-        working-directory: openwrt
-        run: make -j"$(nproc)" download
-
-      - name: Build firmware
-        working-directory: openwrt
-        run: make -j"$(nproc)"
-
-      - name: Upload firmware
+      - name: Upload resolved config
+        if: inputs.mode == 'check'
         uses: actions/upload-artifact@v4
         with:
-          name: fanchmwrt-tr3000-256mb-usb
-          path: openwrt/bin/targets/mediatek/filogic/*cudy_tr3000-256mb-v1*
-          if-no-files-found: error
+          name: resolved-config
+          path: /tmp/resolved.config
+
+      - name: Stage custom overlay files
+        if: inputs.mode == 'build'
+        run: |
+          cp -r "$GITHUB_WORKSPACE/files" openwrt/files
+
+      - name: Cache downloads
+        if: inputs.mode == 'build'
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: dl-${{ github.run_id }}
+          restore-keys: |
+            dl-
+
+      - name: Download package sources
+        if: inputs.mode == 'build'
+        run: |
+          cd openwrt
+          make -j"$(nproc)" download || make -j1 download
+
+      - name: Build
+        if: inputs.mode == 'build'
+        run: |
+          cd openwrt
+          make -j"$(nproc)" || make -j1 V=s
+
+      - name: Collect images
+        if: inputs.mode == 'build'
+        run: |
+          mkdir -p out
+          find openwrt/bin/targets/mediatek/filogic -maxdepth 1 -type f \
+            \( -name '*.bin' -o -name '*.manifest' -o -name 'sha256sums' \) \
+            -exec cp {} out/ \;
+          cp /tmp/resolved.config out/resolved-config.txt
+          ls -lh out
+
+      - name: Upload firmware artifact
+        if: inputs.mode == 'build'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fanchmwrt-tr3000
+          path: out/*
+
+      - name: Create release
+        if: inputs.mode == 'build'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: FanchmWrt TR3000 build-${{ github.run_number }}
+          body: |
+            Cudy TR3000 256MB v1 / FanchmWrt ${{ env.SRC_BRANCH }}
+            added: USB tethering + network + storage, OpenClash, PassWall2, iStore
+          files: |
+            out/*.bin
+            out/*.manifest
+            out/sha256sums
+          fail_on_unmatched_files: false
