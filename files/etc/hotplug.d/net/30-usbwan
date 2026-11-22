@@ -1,0 +1,29 @@
+#!/bin/sh
+# 插上 USB 网卡（随身 WiFi / 手机 USB 共享 / 中兴 F50）后自动接入
+# 只在设备真的挂在 usb 总线上时才处理
+
+[ "$ACTION" = "add" ] || exit 0
+[ -n "$INTERFACE" ] || exit 0
+
+case "$INTERFACE" in
+	usb*|eth2|eth3|eth4|wwan*) ;;
+	*) exit 0 ;;
+esac
+
+link="$(readlink -f "/sys/class/net/$INTERFACE/device" 2>/dev/null)"
+case "$link" in
+	*usb*) ;;
+	*) exit 0 ;;
+esac
+
+uci -q get network.usb >/dev/null 2>&1 || exit 0
+
+cur="$(uci -q get network.usb.device)"
+if [ "$cur" != "$INTERFACE" ]; then
+	logger -t usbwan "usb tethering device $cur -> $INTERFACE"
+	uci -q set network.usb.device="$INTERFACE"
+	uci -q commit network
+fi
+
+logger -t usbwan "bring up network.usb on $INTERFACE"
+ifup usb
