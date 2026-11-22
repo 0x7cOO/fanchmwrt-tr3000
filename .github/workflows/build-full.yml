@@ -87,6 +87,7 @@ jobs:
           CONFIG_PACKAGE_luci-proto-ppp=y
           CONFIG_PACKAGE_luci-app-openclash=y
           CONFIG_PACKAGE_luci-app-passwall2=y
+          CONFIG_PACKAGE_xz-utils=y
           CONFIG_PACKAGE_luci-app-store=y
           CONFIG_PACKAGE_luci-app-openlist2=y
           CONFIG_PACKAGE_openlist2=y
