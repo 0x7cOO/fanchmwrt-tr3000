@@ -1,0 +1,23 @@
+# Target: MediaTek Filogic / Cudy TR3000 256MB v1
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+CONFIG_TARGET_MULTI_PROFILE=n
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_cudy_tr3000-256mb-v1=y
+CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_cudy_tr3000-256mb-v1=y
+
+# ---- OpenWrt base niceties ----
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_luci-app-ttyd=y
+CONFIG_PACKAGE_openssh-sftp-server=n
+CONFIG_PACKAGE_wpad-openssl=y
+CONFIG_PACKAGE_zoneinfo-core=y
+
+# ---- proxy / app store ----
+CONFIG_PACKAGE_luci-app-openclash=y
+CONFIG_PACKAGE_luci-app-passwall2=y
+CONFIG_PACKAGE_luci-i18n-passwall2-zh-cn=y
+CONFIG_PACKAGE_luci-app-store=y
+
+# ---- image / misc ----
+CONFIG_STRIP_KERNEL_EXPORTS=y
+CONFIG_USE_MKLIBS=y
