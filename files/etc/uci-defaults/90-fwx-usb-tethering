@@ -1,0 +1,27 @@
+#!/bin/sh
+# 首次启动时预置 USB 上网接口（随身 WiFi / 手机共享 / F50 等 USB 网卡）
+# 已有 usb 接口则不动，避免破坏用户配置
+
+. /lib/functions.sh
+
+add_iface() {
+	local name="$1" proto="$2" device="$3" metric="$4"
+	uci -q get network."$name" >/dev/null 2>&1 && return 0
+	uci -q batch <<-EOF
+		set network.$name=interface
+		set network.$name.proto=$proto
+		set network.$name.device=$device
+		set network.$name.metric=$metric
+		set network.$name.auto=1
+	EOF
+}
+
+add_iface usb dhcp eth2 20
+add_iface wwan dhcp usb0 20
+
+uci -q commit network
+
+# 打开 /etc/hotplug.d/usb 的 wwan 自动 ifup 所需目录（已存在则忽略）
+[ -d /etc/hotplug.d/usb ] || mkdir -p /etc/hotplug.d/usb
+
+exit 0
