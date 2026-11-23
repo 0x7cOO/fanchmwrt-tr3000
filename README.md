@@ -25,6 +25,43 @@
   `wwan`(usb0, dhcp) 两个接口；`/etc/hotplug.d/net/30-usbwan` 会在插入 USB 网卡后
   自动绑定设备并 `ifup usb`（中兴 F50 / 手机 USB 共享即插即用）
 
+## 软件源已换成清华 TUNA
+
+镜像内的 `/etc/apk/repositories.d/distfeeds.list` 由 `include/version.mk` 的 `VERSION_REPO`
+生成，所以流水线在 clone 之后追加一行覆盖它（步骤 `Point package feeds at TUNA (Tsinghua) mirror`）：
+
+```
+VERSION_REPO:=https://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/25.12.6
+```
+
+产物镜像里所有 feed 就变成：
+
+```
+https://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/25.12.6/targets/mediatek/filogic/packages/packages.adb
+https://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/25.12.6/packages/aarch64_cortex-a53/{base,luci,packages,routing,telephony,video}/packages.adb
+https://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/25.12.6/targets/mediatek/filogic/kmods/<kernelver>/packages.adb
+```
+
+流水线还会 `curl -fsIL` 探一下
+`$MIRROR_REPO/targets/mediatek/filogic/packages/packages.adb`，
+源缺版本时直接 fail，不会闷头烧一张装不了包的固件。
+注意清华只镜像 `releases/targets/packages/kmods`，**没有** `git.openwrt.org` 的 feeds 源码，
+所以 `./scripts/feeds update` 仍走 GitHub / git.openwrt.org（Actions 机器在美国，无影响）。
+
+### 已经刷好的机器上换源（一条命令）
+
+```sh
+# OpenWrt 25.x 用 apk
+cp /etc/apk/repositories.d/distfeeds.list /etc/apk/repositories.d/distfeeds.list.orig
+sed -i 's#https://downloads.openwrt.org#https://mirrors.tuna.tsinghua.edu.cn/openwrt#g' \
+  /etc/apk/repositories.d/distfeeds.list
+apk update
+
+# 老版本 opkg
+sed -i 's#downloads.openwrt.org#mirrors.tuna.tsinghua.edu.cn/openwrt#g' /etc/opkg/distfeeds.conf
+opkg update
+```
+
 ## 怎么跑
 
 Actions → **build-fanchmwrt** → Run workflow：
