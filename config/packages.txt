@@ -27,7 +27,13 @@ wwan
 modemmanager
 luci-proto-qmi
 luci-proto-mbim
+luci-proto-ncm
 luci-proto-3g
+luci-proto-ppp
+xz-utils
+kmod-nls-cp437
+kmod-nls-iso8859-1
+kmod-nls-utf8
 kmod-fs-exfat
 kmod-fs-ntfs3
 kmod-fs-f2fs
